@@ -1,0 +1,162 @@
+import java.util.concurrent.TimeUnit
+
+group 'com.jdcloud.midplatform.services'
+
+apply plugin: 'java' //这个不需要解释
+apply plugin: 'idea' //gradle帮助idea生成一些项目管理文件用的
+apply plugin: 'io.oma.gradle.plugin.version' //版本控制插件
+apply plugin: 'org.springframework.boot' //spring boot的gradle插件
+
+
+sourceCompatibility = 1.8
+
+/*buildscript 内对依赖的下载地址和gradle需要的插件进行定义*/
+buildscript {
+    ext{
+        repository = "http://artifactory.jd.com/list"
+        springBootVersion = '1.5.12.RELEASE'
+        springCloudVersion = 'Edgware.SR4'
+        try{
+            profile = project['env']
+        }catch (Exception e)
+        {
+            profile = "dev"
+        }
+    }
+    repositories {
+        maven { url "${project.repository}/plugins-releases/" } //release仓库
+        maven { url "${project.repository}/plugins-snapshots/" } //快照仓库
+    }
+    dependencies {
+        //version control
+        classpath "io.oma.gradle.plugin:version:latest.release"
+        //spring boot version to 1.5.12.RELEASE
+        classpath "org.springframework.boot:spring-boot-gradle-plugin:1.5.12.RELEASE"
+    }
+    configurations.all {
+        //todo 如果您不喜欢无缓存，那可以修改缓存的时间值
+        resolutionStrategy.cacheDynamicVersionsFor 0, 'seconds'
+        resolutionStrategy.cacheChangingModulesFor 0, 'seconds'
+    }
+}
+//todo 如果您不喜欢无缓存，那可以修改缓存的时间值
+/*配置依赖包动态版本的缓存时间*/
+configurations.all {
+    resolutionStrategy.cacheDynamicVersionsFor 0, TimeUnit.SECONDS
+    resolutionStrategy.cacheChangingModulesFor 0, TimeUnit.SECONDS
+}
+
+/*配置依赖包地址*/
+repositories {
+    //todo 这里您可以增加自己的maven仓库地址
+    maven { url "${project.repository}/libs-releases/" } //release仓库
+    maven { url "${project.repository}/libs-snapshots/" } //快照仓库
+
+}
+
+configurations {
+    providedRuntime
+    mybatisGenerator
+}
+
+
+/*程序编译的依赖包*/
+dependencies {
+    /*编译组件*/
+    compile group: 'org.springframework.boot', name: 'spring-boot-starter-web' //boot的web starter
+    compile group: 'io.oma.standardization.model', name: 'standard-response', version: 'latest.release' //标准响应组件
+    compile group: 'io.oma.standardization.process', name: 'controller-exception-handler-delegate', version: 'latest.release' //标准的controller异常处理
+    compile group: 'io.oma.standardization.model', name: 'standard-exception', version: 'latest.release' //标准异常
+    runtime group: 'io.oma.standardization.process.plugin', name: 'standard-api-exception-handler', version: 'latest.release' //一个，对标准api异常进行处理的默认的异常处理器
+    
+    compile group: 'org.springframework.cloud', name: 'spring-cloud-starter'
+    compile group: 'org.springframework.cloud', name: 'spring-cloud-starter-feign'
+    compile group: 'org.springframework.cloud', name: 'spring-cloud-starter-eureka'
+    compile group: 'org.springframework.cloud', name: 'spring-cloud-starter-config'
+    compile group: 'org.springframework.retry', name: 'spring-retry'
+    /*测试需要的组件*/
+    testCompile group: 'org.springframework.boot', name: 'spring-boot-starter-test'
+
+
+}
+
+configurations {
+    testRuntime.exclude group: 'ch.qos.logback', module: 'logback-classic'
+    testRuntime.exclude group: 'ch.qos.logback', module: 'logback-core'
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+    }
+}
+/*令javadoc支持中文*/
+tasks.withType(Javadoc) {
+    options.encoding = "UTF-8"
+}
+
+try {
+    /*读取仓库配置*/
+    FileInputStream repositoryAuthInfoFile = new FileInputStream("${rootProject.projectDir}/repository-auth-info.yml")
+    Properties repositoryAuthInfo = new Properties()
+    repositoryAuthInfo.load(repositoryAuthInfoFile)
+    repositoryAuthInfoFile.close()
+
+//发布库配置
+    releaseRepository {
+        url = "${project.repository}/libs-releases-local/"
+        user = repositoryAuthInfo.getProperty("user")
+        password = repositoryAuthInfo.getProperty("key")
+    }
+
+    snapshotRepository {
+        url = "${project.repository}/libs-snapshots-local/"
+        user = repositoryAuthInfo.getProperty("user")
+        password = repositoryAuthInfo.getProperty("key")
+    }
+}
+catch (Exception exception) {
+    System.err.println("repository-auth-info.yml not found")
+}
+
+/*def getDbProperties = {
+    def properties = new Properties()
+    file("src/main/resources/mybatis/config.properties").withInputStream { inputStream ->
+        properties.load(inputStream)
+    }
+    properties
+}*/
+
+//task mybatisGenerate{
+//    def properties = getDbProperties()
+//    ant.properties['targetProject'] = projectDir.path
+//    ant.properties['driverClass'] = properties.getProperty("jdbc.driverClassName")
+//    ant.properties['connectionURL'] = properties.getProperty("jdbc.url")
+//    ant.properties['userId'] = properties.getProperty("jdbc.username")
+//    ant.properties['password'] = properties.getProperty("jdbc.password")
+//    ant.properties['src_main_java'] = sourceSets.main.java.srcDirs[0].path
+//    ant.properties['src_main_resources'] = sourceSets.main.resources.srcDirs[0].path
+//    ant.properties['modelPackage'] = properties.getProperty("package.model")
+//    ant.properties['mapperPackage'] = properties.getProperty("package.mapper")
+//    ant.properties['sqlMapperPackage'] = properties.getProperty("package.xml")
+//    ant.taskdef(
+//            name: 'mbgenerator',
+//            classname: 'org.mybatis.generator.ant.GeneratorAntTask',
+//            classpath: configurations.mybatisGenerator.asPath
+//    )
+//    ant.mbgenerator(overwrite: true,
+//            configfile: 'src/main/resources/mybatis/generatorConfig.xml', verbose: true) {
+//        propertyset {
+//            propertyref(name: 'targetProject')
+//            propertyref(name: 'userId')
+//            propertyref(name: 'driverClass')
+//            propertyref(name: 'connectionURL')
+//            propertyref(name: 'password')
+//            propertyref(name: 'src_main_java')
+//            propertyref(name: 'src_main_resources')
+//            propertyref(name: 'modelPackage')
+//            propertyref(name: 'mapperPackage')
+//            propertyref(name: 'sqlMapperPackage')
+//        }
+//    }
+//}

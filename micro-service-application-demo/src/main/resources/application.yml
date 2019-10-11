@@ -1,0 +1,19 @@
+#端口号
+spring:
+  application:
+    name: spring-cloud-book-service
+  profiles:
+    active: test
+server:
+  port: 8880
+
+test:
+  version: 0.0.1
+
+eureka:
+  instance:
+    preferIpAddress: true
+  client:
+    service-url:
+      defaultZone: http://reg.eureka-0.center-w8tci6wqx.com:8761/eureka/
+    register-with-eureka: true
